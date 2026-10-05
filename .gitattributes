@@ -1,0 +1,28 @@
+# ==============================================================================
+# .gitattributes — Enforce LF line endings for all shell/script files
+# Prevents CRLF corruption on Windows for scripts that run inside Linux
+# ==============================================================================
+
+# Default: normalize all text files to LF
+* text=auto eol=lf
+
+# Force LF for all shell scripts, init scripts, and config files
+*.sh       text eol=lf
+*.bash     text eol=lf
+*.script   text eol=lf
+*.config   text eol=lf
+*.c        text eol=lf
+*.h        text eol=lf
+*.md       text eol=lf
+*.txt      text eol=lf
+.gitignore text eol=lf
+init       text eol=lf
+
+# Windows-native batch/PowerShell: keep CRLF
+*.bat      text eol=crlf
+*.ps1      text eol=crlf
+
+# Binary files: no line ending changes
+*.gz       binary
+*.img      binary
+*.cpio     binary

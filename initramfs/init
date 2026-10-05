@@ -1,0 +1,93 @@
+#!/bin/sh
+# ==============================================================================
+# Custom PID 1 Init Script for x86_64 Minimal Linux (with Networking)
+# ==============================================================================
+
+# Ensure standard path
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+# 1. Mount virtual and temporary filesystems
+echo "[init] Mounting virtual filesystems..."
+mkdir -p /proc /sys /dev /tmp /run /etc /var/run
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev 2>/dev/null || true
+mount -t tmpfs none /tmp
+mount -t tmpfs none /run
+
+# Fallback: create device nodes if devtmpfs was not auto-mounted
+if [ ! -e /dev/console ]; then
+    mknod -m 600 /dev/console c 5 1
+fi
+if [ ! -e /dev/null ]; then
+    mknod -m 666 /dev/null c 1 3
+fi
+if [ ! -e /dev/ttyS0 ]; then
+    mknod -m 660 /dev/ttyS0 c 4 64
+fi
+if [ ! -e /dev/tty ]; then
+    mknod -m 666 /dev/tty c 5 0
+fi
+
+# 2. Hostname and environment setup
+HOSTNAME="tiny-x86"
+echo "$HOSTNAME" > /etc/hostname
+hostname "$HOSTNAME"
+
+# 3. Network Initialization
+echo "[init] Configuring network interfaces..."
+# Bring up loopback
+ifconfig lo 127.0.0.1 up 2>/dev/null || true
+
+# Look for primary network interface (eth0)
+if [ -d /sys/class/net/eth0 ]; then
+    echo "[init] Detected network interface eth0. Requesting DHCP lease..."
+    ifconfig eth0 up 2>/dev/null || true
+    # Run udhcpc in background (-b) with timeout
+    if [ -x /usr/share/udhcpc/default.script ]; then
+        udhcpc -i eth0 -b -s /usr/share/udhcpc/default.script -p /var/run/udhcpc.eth0.pid >/dev/null 2>&1
+    else
+        udhcpc -i eth0 -b -p /var/run/udhcpc.eth0.pid >/dev/null 2>&1
+    fi
+fi
+
+# Clear terminal screen (optional) and show banner
+echo ""
+echo "================================================================="
+echo "   __  ___       _   _     _                     "
+echo "  / _|/ _ \     | | (_)   (_)                    "
+echo " | |_| (_) |__ _| |_ _ ___ _ _ __ ___   ___  ___ "
+echo " |  _|\__, / _\` | __| / __| | '_ \` _ \ / _ \/ __|"
+echo " | |    / / (_| | |_| \__ \ | | | | | | (_) \__ \\"
+echo " |_|   /_/ \__,_|\__|_|___/_|_| |_| |_|\___/|___/"
+echo "================================================================="
+echo " Kernel Architecture : $(uname -m)"
+echo " Kernel Version      : $(uname -r)"
+echo " Memory Available    : $(grep MemTotal /proc/meminfo | awk '{print $2, $3}')"
+echo " CPU Model           : $(grep 'model name' /proc/cpuinfo | head -n1 | cut -d':' -f2 | sed 's/^[ \t]*//')"
+echo " System Time         : $(date)"
+echo " Network (eth0)      : $(ifconfig eth0 2>/dev/null | grep 'inet addr' | awk '{print $2}' || echo 'detecting / not connected')"
+echo "================================================================="
+echo " PID 1 /init initialized successfully!"
+echo " Type 'poweroff -f' or 'exit' to shut down the virtual machine."
+echo " Press Ctrl+A then X if running inside QEMU -nographic."
+echo "================================================================="
+echo ""
+
+# 4. Launch interactive shell with job control (cttyhack binds serial console)
+while true; do
+    if [ -x /bin/cttyhack ] && [ -x /bin/sh ]; then
+        setsid /bin/cttyhack /bin/sh
+    elif [ -x /bin/sh ]; then
+        /bin/sh
+    else
+        echo "[init] Fatal: No shell binary found!"
+        sleep 5
+    fi
+
+    echo ""
+    echo "[init] Shell exited. Powering down..."
+    poweroff -f 2>/dev/null || reboot -f 2>/dev/null
+    sleep 2
+done
